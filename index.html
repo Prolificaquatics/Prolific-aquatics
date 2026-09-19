@@ -206,6 +206,8 @@ dialog[open]{display:flex}
 .field input:focus,.field textarea:focus{outline:none;border-color:var(--mulberry)}
 .empty{text-align:center;padding:1.5rem 0 .5rem;display:grid;gap:1rem;justify-items:center}
 .note{font-size:.9rem;color:var(--smoke);text-align:center;margin-top:.8rem}
+.field input[aria-invalid="true"]{border-color:#B3261E;background:#FFF3F1}
+.err{color:#B3261E;font-weight:600;font-size:.98rem;margin:0 0 .9rem}
 
 @media(min-width:700px){
   .grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:2.5rem 1.5rem}
@@ -577,11 +579,18 @@ function renderCart() {
       </div>
     </div>`; }).join("") + `
     <div class="total"><span>Total, ${packWord(packs)}</span><span>${naira(sum)}</span></div>
-    <label class="field">Your name (optional)<input id="custName" autocomplete="name" value="${keepName.replace(/"/g, "&quot;")}"></label>
-    <label class="field">Delivery area (optional)<input id="custArea" autocomplete="address-level2" placeholder="e.g. Lekki, Ikeja, Yaba" value="${keepArea.replace(/"/g, "&quot;")}"></label>
+    <label class="field">Your name (required)<input id="custName" autocomplete="name" required aria-required="true" value="${keepName.replace(/"/g, "&quot;")}"></label>
+    <label class="field">Delivery area (required)<input id="custArea" autocomplete="address-level2" required aria-required="true" placeholder="e.g. Lekki, Ikeja, Yaba" value="${keepArea.replace(/"/g, "&quot;")}"></label>
+    <p class="err" id="custErr" role="alert" hidden></p>
     <button class="btn block" id="sendWa">Send order on WhatsApp</button>
     <p class="note">This opens WhatsApp with your order already written. We reply to confirm payment and delivery.</p>`;
 }
+$("#cartBody").addEventListener("input", e => {
+  if (e.target.matches("#custName, #custArea")) {
+    e.target.removeAttribute("aria-invalid");
+    if ($("#custName").value.trim() && $("#custArea").value.trim()) $("#custErr").hidden = true;
+  }
+});
 $("#cartBody").addEventListener("click", e => {
   const t = e.target.closest("button"); if (!t) return;
   if (t.id === "browse") { $("#cartDlg").close(); location.hash = "packs"; return; }
@@ -592,6 +601,22 @@ $("#cartBody").addEventListener("click", e => {
   if (t.id === "sendWa") sendOrder();
 });
 function sendOrder() {
+  // name and delivery area must be filled in before the order can be sent
+  const nameEl = $("#custName"), areaEl = $("#custArea"), err = $("#custErr");
+  const missing = [];
+  if (!nameEl.value.trim()) missing.push(nameEl);
+  if (!areaEl.value.trim()) missing.push(areaEl);
+  [nameEl, areaEl].forEach(el => el.setAttribute("aria-invalid", missing.includes(el)));
+  if (missing.length) {
+    err.textContent = missing.length === 2 ? "Please enter your name and delivery area to send your order."
+                    : missing[0] === nameEl ? "Please enter your name to send your order."
+                    : "Please enter your delivery area to send your order.";
+    err.hidden = false;
+    missing[0].focus();
+    err.scrollIntoView({ block: "center", behavior: "smooth" });
+    return;
+  }
+  err.hidden = true;
   const { packs, sum } = totals();
   const lines = Object.keys(cart).map(id => {
     const p = byId(id);
@@ -599,7 +624,7 @@ function sendOrder() {
   });
   const name = $("#custName").value.trim(), area = $("#custArea").value.trim();
   const msg = `Hello Prolific Aquatics, I would like to order Cutz smoked catfish:\n\n${lines.join("\n")}\n\nTotal: ${packWord(packs)}, ${naira(sum)}` +
-              (name ? `\nName: ${name}` : "") + (area ? `\nDelivery area: ${area}` : "");
+              `\nName: ${name}\nDelivery area: ${area}`;
   window.open(waLink(msg), "_blank", "noopener");
 }
 const openCart = () => { renderCart(); openDlg($("#cartDlg")); };
